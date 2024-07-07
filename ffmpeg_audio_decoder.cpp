@@ -1,8 +1,12 @@
 
 #include "ffmpeg_audio_decoder.h"
+#include "common.h"
+#include "waveform.h"
+#include <algorithm>
 extern "C" {
 #include "libavcodec/avcodec.h"
 #include "libavutil/channel_layout.h"
+#include "libavutil/mathematics.h"
 #include "libavutil/opt.h"
 #include "libavutil/samplefmt.h"
 #include <libavformat/avformat.h>
@@ -36,8 +40,8 @@ static int output_audio_frame(
   // fwrite(frame->extended_data[0], 1, unpadded_linesize, audio_dst_file);
   int ret = 0;
 
-  int64_t delay = swr_get_delay(swr_ctx, audio_dec_ctx->sample_rate);
-  int64_t dst_nb_samples =
+  std::int64_t delay = swr_get_delay(swr_ctx, audio_dec_ctx->sample_rate);
+  std::int64_t dst_nb_samples =
       av_rescale_rnd(delay + frame->nb_samples, dst_rate,
                      audio_dec_ctx->sample_rate, AV_ROUND_UP);
   if (dst_nb_samples > max_dst_nb_samples) {
@@ -185,11 +189,15 @@ static int open_codec_context(int *stream_idx, AVCodecContext **dec_ctx,
   return 0;
 }
 
-std::unique_ptr<Waveform> decode(const std::string &path, int dst_rate,
-                                 AVSampleFormat dst_sample_fmt,
-                                 AVChannelLayout dst_ch_layout,
-                                 const std::int64_t start,
-                                 const std::int64_t duration) {
+inline void check_cancel_and_throw(std::atomic_bool &cancel_token) {
+  CancelException::check_cancel_and_throw(cancel_token);
+}
+
+int decode(const std::string &path, int dst_rate, AVSampleFormat dst_sample_fmt,
+           AVChannelLayout dst_ch_layout, const std::int64_t start,
+           const std::int64_t duration, std::atomic_bool &cancel_token,
+           std::unique_ptr<Waveform> &result,
+           ProgressCallback progress_callback) {
   ///
   /// Open Input Audio
   ///
@@ -209,151 +217,136 @@ std::unique_ptr<Waveform> decode(const std::string &path, int dst_rate,
   int max_dst_nb_samples = 0;
   int dst_linesize;
   const char *src_filename = path.c_str();
-  std::unique_ptr<Waveform> waveform = std::make_unique<Waveform>();
-  ret = av_samples_alloc_array_and_samples(&dst_data, &dst_linesize,
-                                           dst_ch_layout.nb_channels, 512,
-                                           dst_sample_fmt, 0);
-  if (ret < 0) {
-    goto end;
+  Waveform waveform;
+  bool canceled = false;
+  auto last_progress_timestamp = get_current_timestamp();
+
+  try {
+    check_cancel_and_throw(cancel_token);
+
+    ret = av_samples_alloc_array_and_samples(&dst_data, &dst_linesize,
+                                             dst_ch_layout.nb_channels, 512,
+                                             dst_sample_fmt, 0);
+    if (ret < 0) {
+      goto end;
+    }
+
+    /* open input file, and allocate format context */
+    if (avformat_open_input(&fmt_ctx, src_filename, NULL, NULL) < 0) {
+      fprintf(stderr, "Could not open source file %s\n", src_filename);
+      goto end;
+    }
+    check_cancel_and_throw(cancel_token);
+
+    /* retrieve stream information */
+    if (avformat_find_stream_info(fmt_ctx, NULL) < 0) {
+      fprintf(stderr, "Could not find stream information\n");
+      goto end;
+    }
+
+    if (open_codec_context(&audio_stream_idx, &audio_dec_ctx, fmt_ctx,
+                           AVMEDIA_TYPE_AUDIO) >= 0) {
+      audio_stream = fmt_ctx->streams[audio_stream_idx];
+    }
+    check_cancel_and_throw(cancel_token);
+
+    /* dump input information to stderr */
+    av_dump_format(fmt_ctx, 0, src_filename, 0);
+
+    if (!audio_stream) {
+      fprintf(stderr,
+              "Could not find audio or video stream in the input, aborting\n");
+      ret = 1;
+      goto end;
+    }
+
+    frame = av_frame_alloc();
+    if (!frame) {
+      fprintf(stderr, "Could not allocate frame\n");
+      ret = AVERROR(ENOMEM);
+      goto end;
+    }
+
+    pkt = av_packet_alloc();
+    if (!pkt) {
+      fprintf(stderr, "Could not allocate packet\n");
+      ret = AVERROR(ENOMEM);
+      goto end;
+    }
+
+    /* create resampler context */
+    swr_ctx = swr_alloc();
+    if (!swr_ctx) {
+      fprintf(stderr, "Could not allocate resampler context\n");
+      ret = AVERROR(ENOMEM);
+      goto end;
+    }
+
+    /* set options */
+    av_opt_set_chlayout(swr_ctx, "in_chlayout", &audio_dec_ctx->ch_layout, 0);
+    av_opt_set_int(swr_ctx, "in_sample_rate", audio_dec_ctx->sample_rate, 0);
+    av_opt_set_sample_fmt(swr_ctx, "in_sample_fmt", audio_dec_ctx->sample_fmt,
+                          0);
+
+    av_opt_set_chlayout(swr_ctx, "out_chlayout", &dst_ch_layout, 0);
+    av_opt_set_int(swr_ctx, "out_sample_rate", dst_rate, 0);
+    av_opt_set_sample_fmt(swr_ctx, "out_sample_fmt", dst_sample_fmt, 0);
+
+    /* initialize the resampling context */
+    if ((ret = swr_init(swr_ctx)) < 0) {
+      fprintf(stderr, "Failed to initialize the resampling context\n");
+      goto end;
+    }
+    check_cancel_and_throw(cancel_token);
+
+    if (audio_stream)
+      printf("Demuxing audio from file '%s'\n", src_filename);
+#if SPLEETER_ENABLE_PROGRESS_CALLBACK
+    auto progress_fun = [&]() {
+      auto now_progress_timestamp = get_current_timestamp();
+      auto x = now_progress_timestamp - last_progress_timestamp;
+      if (x.count() > 500) {
+        progress_callback(av_rescale(nb_samples, 1000, dst_rate));
+        last_progress_timestamp = now_progress_timestamp;
+      }
+    };
+#endif
+
+    /* read frames from the file */
+    while (av_read_frame(fmt_ctx, pkt) >= 0) {
+      // check if the packet belongs to a stream we are interested in, otherwise
+      // skip it
+      if (pkt->stream_index == audio_stream_idx)
+        ret = decode_packet(audio_dec_ctx, pkt, frame, swr_ctx, dst_data,
+                            dst_rate, dst_ch_layout, dst_sample_fmt,
+                            max_dst_nb_samples, dst_linesize, nb_samples,
+                            waveform.data);
+      av_packet_unref(pkt);
+      if (ret < 0)
+        break;
+      check_cancel_and_throw(cancel_token);
+#if SPLEETER_ENABLE_PROGRESS_CALLBACK
+      progress_fun();
+#endif
+    }
+
+    /* flush the decoders */
+    if (audio_dec_ctx) {
+      decode_packet(audio_dec_ctx, NULL, frame, swr_ctx, dst_data, dst_rate,
+                    dst_ch_layout, dst_sample_fmt, max_dst_nb_samples,
+                    dst_linesize, nb_samples, waveform.data);
+#if SPLEETER_ENABLE_PROGRESS_CALLBACK
+      progress_fun();
+#endif
+    }
+    check_cancel_and_throw(cancel_token);
+
+    waveform.nb_frames = nb_samples;
+    waveform.nb_channels = dst_ch_layout.nb_channels;
+    result.reset(new Waveform(std::move(waveform)));
+  } catch (const CancelException &e) {
+    canceled = true;
   }
-  /* open input file, and allocate format context */
-  if (avformat_open_input(&fmt_ctx, src_filename, NULL, NULL) < 0) {
-    fprintf(stderr, "Could not open source file %s\n", src_filename);
-    goto end;
-  }
-
-  /* retrieve stream information */
-  if (avformat_find_stream_info(fmt_ctx, NULL) < 0) {
-    fprintf(stderr, "Could not find stream information\n");
-    goto end;
-  }
-
-  if (open_codec_context(&audio_stream_idx, &audio_dec_ctx, fmt_ctx,
-                         AVMEDIA_TYPE_AUDIO) >= 0) {
-    audio_stream = fmt_ctx->streams[audio_stream_idx];
-  }
-
-  /* dump input information to stderr */
-  av_dump_format(fmt_ctx, 0, src_filename, 0);
-
-  if (!audio_stream) {
-    fprintf(stderr,
-            "Could not find audio or video stream in the input, aborting\n");
-    ret = 1;
-    goto end;
-  }
-
-  frame = av_frame_alloc();
-  if (!frame) {
-    fprintf(stderr, "Could not allocate frame\n");
-    ret = AVERROR(ENOMEM);
-    goto end;
-  }
-
-  pkt = av_packet_alloc();
-  if (!pkt) {
-    fprintf(stderr, "Could not allocate packet\n");
-    ret = AVERROR(ENOMEM);
-    goto end;
-  }
-
-  /* create resampler context */
-  swr_ctx = swr_alloc();
-  if (!swr_ctx) {
-    fprintf(stderr, "Could not allocate resampler context\n");
-    ret = AVERROR(ENOMEM);
-    goto end;
-  }
-
-  /* set options */
-  av_opt_set_chlayout(swr_ctx, "in_chlayout", &audio_dec_ctx->ch_layout, 0);
-  av_opt_set_int(swr_ctx, "in_sample_rate", audio_dec_ctx->sample_rate, 0);
-  av_opt_set_sample_fmt(swr_ctx, "in_sample_fmt", audio_dec_ctx->sample_fmt, 0);
-
-  av_opt_set_chlayout(swr_ctx, "out_chlayout", &dst_ch_layout, 0);
-  av_opt_set_int(swr_ctx, "out_sample_rate", dst_rate, 0);
-  av_opt_set_sample_fmt(swr_ctx, "out_sample_fmt", dst_sample_fmt, 0);
-
-  /* initialize the resampling context */
-  if ((ret = swr_init(swr_ctx)) < 0) {
-    fprintf(stderr, "Failed to initialize the resampling context\n");
-    goto end;
-  }
-
-  if (audio_stream)
-    printf("Demuxing audio from file '%s'\n", src_filename);
-
-  /* read frames from the file */
-  while (av_read_frame(fmt_ctx, pkt) >= 0) {
-    // check if the packet belongs to a stream we are interested in, otherwise
-    // skip it
-    if (pkt->stream_index == audio_stream_idx)
-      ret =
-          decode_packet(audio_dec_ctx, pkt, frame, swr_ctx, dst_data, dst_rate,
-                        dst_ch_layout, dst_sample_fmt, max_dst_nb_samples,
-                        dst_linesize, nb_samples, waveform->data);
-    av_packet_unref(pkt);
-    if (ret < 0)
-      break;
-  }
-
-  /* flush the decoders */
-  if (audio_dec_ctx)
-    decode_packet(audio_dec_ctx, NULL, frame, swr_ctx, dst_data, dst_rate,
-                  dst_ch_layout, dst_sample_fmt, max_dst_nb_samples,
-                  dst_linesize, nb_samples, waveform->data);
-  //        av_init_packet(&packet);
-  //        std::uint8_t *buffer = (std::uint8_t *)
-  //        av_malloc(MAX_AUDIO_FRAME_SIZE * 2);
-  //        ///TODO
-  //        Waveform waveform{};
-  //        std::int32_t nb_samples{0};
-  //        while (av_read_frame(format_context, packet) >= 0) {
-  //            AVFrame *frame = av_frame_alloc();
-  ////        ASSERT_CHECK(frame) << "Failed to allocate frame";
-  //
-  //            ret = avcodec_send_packet(audio_codec_context, packet);
-  ////        ASSERT_CHECK_LE(0, ret) << "Failed to send packet for decoding.
-  ///(Returned: " << ret << ")";
-  //            while (ret >= 0) {
-  //                ret = avcodec_receive_frame(audio_codec_context, frame);
-  //                if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-  //                    break;
-  //                }
-  ////            ASSERT_CHECK_EQ(0, ret) << "Failed to decode received packet.
-  ///(Returned: " << ret << ")";
-  //
-  //                auto buffer_size = frame->nb_samples *
-  //                                   av_get_bytes_per_sample(audio_codec_context->sample_fmt);
-  //                ret = swr_convert(swr_context, &buffer, buffer_size,
-  //                                  (const std::uint8_t **) frame->data,
-  //                                  frame->nb_samples);
-  ////            ASSERT_CHECK_LE(0, ret) << "Failed to resample. (Returned: "
-  ///<< ret << ")";
-  //
-  //                for (auto idx = 0; idx < buffer_size; ++idx) {
-  //                    waveform.data.push_back(buffer[idx]);
-  //                }
-  //
-  //                nb_samples += frame->nb_samples;
-  //            }
-  //
-  //            av_frame_free(&frame);
-  //            av_packet_unref(packet);
-  //        }
-  /// Update Audio properties before releasing resources
-  /// TODO
-  waveform->nb_frames = nb_samples;
-  waveform->nb_channels = dst_ch_layout.nb_channels;
-  //        av_packet_unref(packet);
-  //        av_free(buffer);
-  //        swr_free(&swr_context);
-  //        avcodec_close(audio_codec_context);
-  //        avformat_close_input(&format_context);
-  //        avcodec_alloc_context3()
-  //    SPLEETER_LOG(DEBUG) << "Decoded waveform with " << audio_properties_;
-  //    SPLEETER_LOG(INFO) << "Loaded waveform from " << path << " using
-  //    FFMPEG.";
 
 end:
   avcodec_free_context(&audio_dec_ctx);
@@ -365,12 +358,19 @@ end:
     av_freep(&dst_data[0]);
   av_freep(&dst_data);
   swr_free(&swr_ctx);
+  //   if (ret < 0) {
+  //   return nullptr;
+  // }
+
+  // return waveform;
+  if (canceled) {
+    return 0;
+  }
   if (ret < 0) {
-    return nullptr;
+    return ret;
   }
 
-  return waveform;
-}
+  return 1;
 } // namespace codec
-
+} // namespace codec
 } // namespace spleeter

@@ -20,6 +20,7 @@ find_library(swscale_LIB NAMES swscale PATHS ${FFMPEG_DIR} PATH_SUFFIXES lib REQ
 add_executable(test_ffmpeg ffmpeg_audio_decoder.cpp ffmpeg_audio_encoder.cpp main.cpp ffmpeg_audio_adapter.cpp)
 target_include_directories(test_ffmpeg PRIVATE ${FFMPEG_INCLUDE_DIR})
 target_link_libraries(test_ffmpeg PRIVATE ${avcodec_LIB} ${avdevice_LIB} ${avfilter_LIB} ${avformat_LIB} ${avutil_LIB} ${swresample_LIB} ${swscale_LIB})
+target_compile_definitions(test_ffmpeg PRIVATE SPLEETER_ENABLE_PROGRESS_CALLBACK)
 
 add_executable(transcode_aac transcode_aac.c)
 target_include_directories(transcode_aac PRIVATE ${FFMPEG_INCLUDE_DIR})

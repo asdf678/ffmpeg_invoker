@@ -6,21 +6,26 @@
 #ifndef SPLEETER_AUDIO_FFMPEG_AUDIO_ADAPTER_H
 #define SPLEETER_AUDIO_FFMPEG_AUDIO_ADAPTER_H
 
+#include "common.h"
 #include "waveform.h"
+#include <atomic>
+#include <functional>
 #include <memory>
+
 namespace spleeter {
-/// @brief An AudioAdapter implementation that use FFMPEG libraries to perform
-/// I/O operation for audio processing.
-
-enum EncodeFormat { mp3, aac, flac, wav };
-
 class FfmpegAudioAdapter final {
-public:
-  std::unique_ptr<Waveform> Load(const std::string &path,
-                                 const std::int64_t start,
-                                 const std::int64_t duration);
+private:
+  std::atomic_bool cancel_token_{false};
 
-  int Save(Waveform waveform, std::string filename);
+public:
+  int Decode(const std::string &path, const std::int64_t start,
+             const std::int64_t duration, std::unique_ptr<Waveform> &result,
+             ProgressCallback progress_callback);
+
+  int Encode(Waveform waveform, std::string filename,
+             ProgressCallback progress_callback);
+
+  void Cancel();
 };
 } // namespace spleeter
 
