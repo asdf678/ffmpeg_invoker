@@ -27,9 +27,26 @@ int FfmpegAudioAdapter::Decode(const std::string &path,
 int FfmpegAudioAdapter::Encode(Waveform waveform, std::string filename,
                                ProgressCallback progress_callback) {
   cancel_token_.store(false);
-  return spleeter::codec::encode(filename, kSampleRate, kSampleFormat,
-                                 kChannelLayout, std::move(waveform), -1,
-                                 cancel_token_, std::move(progress_callback));
+  //   d = new spleeter::codec::FFmpegAudioEncoder()
+  auto encoder = spleeter::codec::FFmpegAudioEncoder::create(
+      filename, kSampleRate, kSampleFormat, kChannelLayout, -1, &cancel_token_);
+  if (!encoder) {
+    return -1;
+  }
+  auto waveform_copy = waveform;
+  int ret = encoder->encode(std::move(waveform));
+  // if(ret>0)
+  // {
+  //   ret = encoder->encode(std::move(waveform_copy));
+  // }
+  if (ret > 0) {
+    ret = encoder->finish();
+  }
+  return ret;
+  //   return spleeter::codec::encode(filename, kSampleRate, kSampleFormat,
+  //                                  kChannelLayout, std::move(waveform), -1,
+  //                                  cancel_token_,
+  //                                  std::move(progress_callback));
 }
 void FfmpegAudioAdapter::Cancel() { cancel_token_.store(true); }
 

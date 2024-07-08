@@ -5,18 +5,11 @@
 #include "waveform.h"
 #include <algorithm>
 #include <assert.h>
+#include <memory>
 #include <vector>
-extern "C" {
-#include "libavutil/avassert.h"
-#include "libavutil/frame.h"
-#include <libavcodec/avcodec.h>
-#include <libavformat/avformat.h>
-#include <libavutil/audio_fifo.h>
-#include <libswresample/swresample.h>
-}
+
 namespace spleeter {
 namespace codec {
-
 class FramesManager {
   AVAudioFifo *audio_fifo_{nullptr};
   AVSampleFormat sample_fmt_;
@@ -90,7 +83,6 @@ public:
     }
   }
 };
-
 static int open_output_file(const char *filename, int sample_rate,
                             AVSampleFormat sample_fmt, int nb_channels,
                             int bitrate,
@@ -546,58 +538,216 @@ static int write_output_file_trailer(AVFormatContext *output_format_context) {
 inline void check_cancel_and_throw(std::atomic_bool &cancel_token) {
   CancelException::check_cancel_and_throw(cancel_token);
 }
-int encode(const std::string &path, int src_sample_rate,
-           AVSampleFormat src_sample_fmt, AVChannelLayout src_ch_layout,
-           Waveform waveform, int bitrate, std::atomic_bool &cancel_token,
-           ProgressCallback progress_callback) {
-  AVFormatContext *output_format_context = NULL;
-  AVCodecContext *output_codec_context = NULL;
-  SwrContext *resample_context = NULL;
-  AVAudioFifo *fifo = NULL;
+// int encode(const std::string &path, int src_sample_rate,
+//            AVSampleFormat src_sample_fmt, AVChannelLayout src_ch_layout,
+//            Waveform waveform, int bitrate, std::atomic_bool &cancel_token,
+//            ProgressCallback progress_callback) {
+//   AVFormatContext *output_format_context = NULL;
+//   AVCodecContext *output_codec_context = NULL;
+//   SwrContext *resample_context = NULL;
+//   AVAudioFifo *fifo = NULL;
 
-  FramesManager frame_manager(src_sample_fmt, &src_ch_layout, src_sample_rate);
+//   FramesManager frame_manager(src_sample_fmt, &src_ch_layout,
+//   src_sample_rate);
 
-  int data_written = 0;
+//   int data_written = 0;
+
+//   int ret = AVERROR_EXIT;
+//   bool canceled = false;
+//   int64_t pts = 0;
+//   auto last_progress_timestamp = get_current_timestamp();
+
+//   try {
+//     if (frame_manager.alloc(std::move(waveform))) {
+//       return -1;
+//     }
+//     check_cancel_and_throw(cancel_token);
+//     /* Open the output file for writing. */
+//     if ((open_output_file(path.c_str(), src_sample_rate, src_sample_fmt,
+//                           src_ch_layout.nb_channels, bitrate,
+//                           &output_format_context, &output_codec_context)))
+//       goto cleanup;
+//     check_cancel_and_throw(cancel_token);
+
+//     if (init_resampler(&src_ch_layout, src_sample_fmt, src_sample_rate,
+//                        output_codec_context, &resample_context))
+//       goto cleanup;
+//     if (init_fifo(&fifo, output_codec_context))
+//       goto cleanup;
+//     check_cancel_and_throw(cancel_token);
+
+//     /* Write the header of the output file container. */
+//     if ((write_output_file_header(output_format_context)))
+//       goto cleanup;
+//     check_cancel_and_throw(cancel_token);
+// #if SPLEETER_ENABLE_PROGRESS_CALLBACK
+//     auto progress_fun = [&]() {
+//       auto now_progress_timestamp = get_current_timestamp();
+//       auto x = now_progress_timestamp - last_progress_timestamp;
+//       if (x.count() > 500) {
+//         progress_callback(
+//             av_rescale(pts, 1000, output_codec_context->sample_rate));
+//         last_progress_timestamp = now_progress_timestamp;
+//       }
+//     };
+// #endif
+//     while (1) {
+//       const int output_frame_size = output_codec_context->frame_size;
+//       int finished = 0;
+
+//       while (av_audio_fifo_size(fifo) < output_frame_size) {
+//         if (read_decode_convert_and_store(fifo, output_codec_context,
+//                                           resample_context, &finished,
+//                                           frame_manager))
+//           goto cleanup;
+//         check_cancel_and_throw(cancel_token);
+
+//         if (finished)
+//           break;
+//       }
+
+//       while (av_audio_fifo_size(fifo) >= output_frame_size ||
+//              (finished && av_audio_fifo_size(fifo) > 0)) {
+//         /* Take one frame worth of audio samples from the FIFO buffer,
+//          * encode it and write it to the output file. */
+//         if (load_encode_and_write(fifo, output_format_context,
+//                                   output_codec_context, pts))
+//           goto cleanup;
+//         check_cancel_and_throw(cancel_token);
+// #if SPLEETER_ENABLE_PROGRESS_CALLBACK
+//         progress_fun();
+// #endif
+//       }
+
+//       /* If we are at the end of the input file and have encoded
+//        * all remaining samples, we can exit this loop and finish. */
+//       if (finished) {
+//         int data_written;
+//         /* Flush the encoder as it may have delayed frames. */
+//         do {
+//           if (encode_audio_frame(NULL, output_format_context,
+//                                  output_codec_context, &data_written, pts)) {
+//             goto cleanup;
+//             check_cancel_and_throw(cancel_token);
+// #if SPLEETER_ENABLE_PROGRESS_CALLBACK
+//             progress_fun();
+// #endif
+//           }
+//         } while (data_written);
+//         break;
+//       }
+//     }
+
+//     if (write_output_file_trailer(output_format_context))
+//       goto cleanup;
+//     check_cancel_and_throw(cancel_token);
+
+//     ret = 0;
+//   } catch (const CancelException &) {
+//     canceled = true;
+//   }
+
+// cleanup:
+//   if (fifo)
+//     av_audio_fifo_free(fifo);
+//   swr_free(&resample_context);
+//   if (output_codec_context)
+//     avcodec_free_context(&output_codec_context);
+//   if (output_format_context) {
+//     avio_closep(&output_format_context->pb);
+//     avformat_free_context(output_format_context);
+//   }
+//   // return ret;
+
+//   if (canceled) {
+//     return 0;
+//   }
+//   if (ret < 0) {
+//     return ret;
+//   }
+//   return 1;
+// }
+
+FFmpegAudioEncoder::FFmpegAudioEncoder(std::string path, int src_sample_rate,
+                                       AVSampleFormat src_sample_fmt,
+                                       const AVChannelLayout &src_ch_layout,
+                                       int bitrate,
+                                       std::atomic_bool *cancel_token)
+    : path_(path), src_sample_rate_(src_sample_rate),
+      src_sample_fmt_(src_sample_fmt), bitrate_(bitrate),
+      cancel_token_(cancel_token) {
+  av_channel_layout_copy(&src_ch_layout_, &src_ch_layout);
+  // frame_manager_ = std::make_unique<FramesManager>(
+  //     src_sample_fmt, &src_ch_layout_, src_sample_rate);
+}
+std::unique_ptr<FFmpegAudioEncoder>
+FFmpegAudioEncoder::create(std::string path, int src_sample_rate,
+                           AVSampleFormat src_sample_fmt,
+                           const AVChannelLayout &src_ch_layout, int bitrate,
+                           std::atomic_bool *cancel_token) {
+  auto encoder = std::make_unique<FFmpegAudioEncoder>(
+      path, src_sample_rate, src_sample_fmt, src_ch_layout, bitrate,
+      cancel_token);
+  /* Open the output file for writing. */
+  if ((open_output_file(path.c_str(), src_sample_rate, src_sample_fmt,
+                        src_ch_layout.nb_channels, bitrate,
+                        &encoder->output_format_context_,
+                        &encoder->output_codec_context_)))
+    return nullptr;
+
+  if (init_resampler(&src_ch_layout, src_sample_fmt, src_sample_rate,
+                     encoder->output_codec_context_,
+                     &encoder->resample_context_))
+    return nullptr;
+  if (init_fifo(&encoder->fifo_, encoder->output_codec_context_))
+    return nullptr;
+
+  /* Write the header of the output file container. */
+  if ((write_output_file_header(encoder->output_format_context_)))
+    return nullptr;
+  return encoder;
+}
+
+int FFmpegAudioEncoder::encode(Waveform waveform) {
 
   int ret = AVERROR_EXIT;
   bool canceled = false;
-  int64_t pts = 0;
-  auto last_progress_timestamp = get_current_timestamp();
-
+  int waveform_data_size = waveform.data.size();
+  int waveform_data_nb_frames = waveform.nb_frames;
   try {
+    // FramesManager &frame_manager = *frame_manager_;
+    auto &cancel_token = *cancel_token_;
+    auto &path = path_;
+    auto &src_sample_rate = src_sample_rate_;
+    auto &src_sample_fmt = src_sample_fmt_;
+    auto &src_ch_layout = src_ch_layout_;
+    auto &bitrate = bitrate_;
+
+    AVFormatContext *&output_format_context = output_format_context_;
+    AVCodecContext *&output_codec_context = output_codec_context_;
+    SwrContext *&resample_context = resample_context_;
+    AVAudioFifo *fifo = fifo_;
+    check_cancel_and_throw(cancel_token);
+
+    FramesManager frame_manager(src_sample_fmt, &src_ch_layout_,
+                                src_sample_rate);
+
     if (frame_manager.alloc(std::move(waveform))) {
       return -1;
     }
     check_cancel_and_throw(cancel_token);
-    /* Open the output file for writing. */
-    if ((open_output_file(path.c_str(), src_sample_rate, src_sample_fmt,
-                          src_ch_layout.nb_channels, bitrate,
-                          &output_format_context, &output_codec_context)))
-      goto cleanup;
-    check_cancel_and_throw(cancel_token);
 
-    if (init_resampler(&src_ch_layout, src_sample_fmt, src_sample_rate,
-                       output_codec_context, &resample_context))
-      goto cleanup;
-    if (init_fifo(&fifo, output_codec_context))
-      goto cleanup;
-    check_cancel_and_throw(cancel_token);
-
-    /* Write the header of the output file container. */
-    if ((write_output_file_header(output_format_context)))
-      goto cleanup;
-    check_cancel_and_throw(cancel_token);
-#if SPLEETER_ENABLE_PROGRESS_CALLBACK
-    auto progress_fun = [&]() {
-      auto now_progress_timestamp = get_current_timestamp();
-      auto x = now_progress_timestamp - last_progress_timestamp;
-      if (x.count() > 500) {
-        progress_callback(
-            av_rescale(pts, 1000, output_codec_context->sample_rate));
-        last_progress_timestamp = now_progress_timestamp;
-      }
-    };
-#endif
+    // #if SPLEETER_ENABLE_PROGRESS_CALLBACK
+    //     auto progress_fun = [&]() {
+    //       auto now_progress_timestamp = get_current_timestamp();
+    //       auto x = now_progress_timestamp - last_progress_timestamp;
+    //       if (x.count() > 500) {
+    //         progress_callback(
+    //             av_rescale(pts, 1000, output_codec_context->sample_rate));
+    //         last_progress_timestamp = now_progress_timestamp;
+    //       }
+    //     };
+    // #endif
     while (1) {
       const int output_frame_size = output_codec_context->frame_size;
       int finished = 0;
@@ -621,32 +771,19 @@ int encode(const std::string &path, int src_sample_rate,
                                   output_codec_context, pts))
           goto cleanup;
         check_cancel_and_throw(cancel_token);
-#if SPLEETER_ENABLE_PROGRESS_CALLBACK
-        progress_fun();
-#endif
+        // #if SPLEETER_ENABLE_PROGRESS_CALLBACK
+        //         progress_fun();
+        // #endif
       }
 
       /* If we are at the end of the input file and have encoded
        * all remaining samples, we can exit this loop and finish. */
       if (finished) {
-        int data_written;
-        /* Flush the encoder as it may have delayed frames. */
-        do {
-          if (encode_audio_frame(NULL, output_format_context,
-                                 output_codec_context, &data_written, pts)) {
-            goto cleanup;
-            check_cancel_and_throw(cancel_token);
-#if SPLEETER_ENABLE_PROGRESS_CALLBACK
-            progress_fun();
-#endif
-          }
-        } while (data_written);
+
         break;
       }
     }
 
-    if (write_output_file_trailer(output_format_context))
-      goto cleanup;
     check_cancel_and_throw(cancel_token);
 
     ret = 0;
@@ -655,17 +792,6 @@ int encode(const std::string &path, int src_sample_rate,
   }
 
 cleanup:
-  if (fifo)
-    av_audio_fifo_free(fifo);
-  swr_free(&resample_context);
-  if (output_codec_context)
-    avcodec_free_context(&output_codec_context);
-  if (output_format_context) {
-    avio_closep(&output_format_context->pb);
-    avformat_free_context(output_format_context);
-  }
-  // return ret;
-
   if (canceled) {
     return 0;
   }
@@ -674,5 +800,44 @@ cleanup:
   }
   return 1;
 }
+
+int FFmpegAudioEncoder::finish() {
+  auto &cancel_token = *cancel_token_;
+
+  AVFormatContext *&output_format_context = output_format_context_;
+  AVCodecContext *&output_codec_context = output_codec_context_;
+  int ret = AVERROR_EXIT;
+  int data_written;
+  /* Flush the encoder as it may have delayed frames. */
+  do {
+    if (encode_audio_frame(NULL, output_format_context, output_codec_context,
+                           &data_written, pts)) {
+      goto cleanup;
+      check_cancel_and_throw(cancel_token);
+      // #if SPLEETER_ENABLE_PROGRESS_CALLBACK
+      //             progress_fun();
+      // #endif
+    }
+  } while (data_written);
+
+  if (write_output_file_trailer(output_format_context))
+    goto cleanup;
+  ret = 1;
+cleanup:
+  return ret;
+}
+
+FFmpegAudioEncoder::~FFmpegAudioEncoder() {
+  if (fifo_)
+    av_audio_fifo_free(fifo_);
+  swr_free(&resample_context_);
+  if (output_codec_context_)
+    avcodec_free_context(&output_codec_context_);
+  if (output_format_context_) {
+    avio_closep(&output_format_context_->pb);
+    avformat_free_context(output_format_context_);
+  }
+}
+
 } // namespace codec
 } // namespace spleeter
