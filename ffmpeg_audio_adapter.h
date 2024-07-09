@@ -13,20 +13,37 @@
 #include <memory>
 
 namespace spleeter {
-class FfmpegAudioAdapter final {
-private:
-  std::atomic_bool cancel_token_{false};
+    namespace codec {
+        class FFmpegAudioEncoder;
 
-public:
-  int Decode(const std::string &path, const std::int64_t start,
-             const std::int64_t duration, std::unique_ptr<Waveform> &result,
-             ProgressCallback progress_callback);
+        class FFmpegAudioDecoder;
+    }
+    class FfmpegAudioAdapter final {
+    private:
+        std::unique_ptr<codec::FFmpegAudioEncoder> encoder_;
+    public:
 
-  int Encode(Waveform waveform, std::string filename,
-             ProgressCallback progress_callback);
+        FfmpegAudioAdapter(const FfmpegAudioAdapter &) = delete;
 
-  void Cancel();
-};
+        FfmpegAudioAdapter &operator=(const FfmpegAudioAdapter &) = delete;
+
+        FfmpegAudioAdapter(FfmpegAudioAdapter &&);
+
+        FfmpegAudioAdapter &operator=(FfmpegAudioAdapter &&);
+
+        FfmpegAudioAdapter(std::string out_filename, std::atomic_bool *cancel_token);
+
+        static int Decode(const std::string path, const std::int64_t start,
+                          const std::int64_t duration, std::unique_ptr<Waveform> &result,
+                          ProgressCallback progress_callback, std::atomic_bool *cancel_token);
+
+        int Encode(Waveform waveform, ProgressCallback progress_callback);
+
+        int FinishEncode();
+
+        ~FfmpegAudioAdapter();
+
+    };
 } // namespace spleeter
 
 #endif /// SPLEETER_AUDIO_FFMPEG_AUDIO_ADAPTER_H

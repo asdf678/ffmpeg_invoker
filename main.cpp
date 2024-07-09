@@ -1,5 +1,6 @@
 #include "ffmpeg_audio_adapter.h"
 #include "waveform.h"
+#include <atomic>
 #include <cassert>
 #include <chrono>
 #include <iostream>
@@ -32,13 +33,14 @@ int main(int argc, char **argv) {
   string output_flename = argv[2];
   int alive_time = std::stoi(argv[3]);
   cout << "load path:" << path << endl;
-  unique_ptr<spleeter::FfmpegAudioAdapter> adapter =
-      make_unique<spleeter::FfmpegAudioAdapter>();
-  thread t([=, &adapter]() {
+  std::atomic_bool cancel_token{false};
+
+  thread t([=, &cancel_token]() {
     unique_ptr<spleeter::Waveform> waveform;
-    auto decode_ret = adapter->Decode(path, -1, -1, waveform, [](auto &&t) {
-      std::cout << "decode pos:" << t << "ms" << endl;
-    });
+    auto decode_ret = spleeter::FfmpegAudioAdapter::Decode(
+        path, -1, -1, waveform,
+        [](auto &&t) { std::cout << "decode pos:" << t << "ms" << endl; },
+        &cancel_token);
     if (decode_ret == 0) {
       cout << "load failed(canceled):" << path << endl;
       return 1;
@@ -51,10 +53,12 @@ int main(int argc, char **argv) {
     assert(waveform);
     cout << "result nb_channels:" << waveform->nb_channels << endl;
     cout << "result nb_frames:" << waveform->nb_frames << endl;
-    auto encode_ret =
-        adapter->Encode(std::move(*waveform), output_flename, [](auto &&t) {
-          std::cout << "encode pos:" << t << "ms" << endl;
-        });
+    auto adapter = std::make_unique<spleeter::FfmpegAudioAdapter>(
+        output_flename, &cancel_token);
+
+    auto encode_ret = adapter->Encode(std::move(*waveform), [](auto &&t) {
+      std::cout << "encode pos:" << t << "ms" << endl;
+    });
     /// 由于被move了，对象不可用，所以在这里reset null
     waveform.reset();
     if (encode_ret == 0) {
@@ -72,7 +76,8 @@ int main(int argc, char **argv) {
 
   if (alive_time > 0) {
     this_thread::sleep_for(std::chrono::milliseconds(alive_time));
-    adapter->Cancel();
+    // adapter->Cancel();
+    cancel_token.store(true);
   }
 
   t.join();
