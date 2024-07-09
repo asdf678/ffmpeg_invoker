@@ -1,42 +1,45 @@
 #ifndef SPLEETER_COMMON_H
 #define SPLEETER_COMMON_H
 
+#include "waveform.h"
 #include <atomic>
 #include <chrono>
 #include <exception>
-#include <string>
 #include <functional>
-
+#include <queue>
+#include <string>
+#include <vector>
 namespace spleeter {
 
-    namespace constants {
-        static constexpr int kSampleRate = 44100;
-        static constexpr int kChannelNum = 2;
+namespace constants {
+static constexpr int kSampleRate = 44100;
+static constexpr int kChannelNum = 2;
+} // namespace constants
+
+using ProgressCallback = std::function<void(int64_t)>;
+
+class CancelException : public std::exception {
+private:
+  std::string message;
+
+public:
+  CancelException(const std::string msg = "") : message(msg) {}
+
+  const char *what() const noexcept override { return message.c_str(); }
+
+  static void check_cancel_and_throw(std::atomic_bool &cancel_token) {
+    if (cancel_token.load()) {
+      throw CancelException();
     }
+  }
+};
 
-    using ProgressCallback = std::function<void(int64_t)>;
+std::chrono::milliseconds get_current_timestamp();
 
-    class CancelException : public std::exception {
-    private:
-        std::string message;
-
-    public:
-        CancelException(const std::string msg = "") : message(msg) {}
-
-        const char *what() const noexcept override { return message.c_str(); }
-
-        static void check_cancel_and_throw(std::atomic_bool &cancel_token) {
-            if (cancel_token.load()) {
-                throw CancelException();
-            }
-        }
-    };
-
-    inline std::chrono::milliseconds get_current_timestamp() {
-        auto now = std::chrono::system_clock::now();
-        auto timestamp = std::chrono::time_point_cast<std::chrono::milliseconds>(now);
-        return timestamp.time_since_epoch();
-    }
+std::queue<spleeter::Waveform> segment_audio(const Waveform &,
+                                             std::size_t segment_nb_samples,
+                                             std::size_t boundary_nb_samples);
 
 } // namespace spleeter
+
 #endif

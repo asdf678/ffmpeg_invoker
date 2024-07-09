@@ -17,7 +17,7 @@ find_library(avutil_LIB NAMES avutil PATHS ${FFMPEG_DIR} PATH_SUFFIXES lib REQUI
 find_library(swresample_LIB NAMES swresample PATHS ${FFMPEG_DIR} PATH_SUFFIXES lib REQUIRED)
 find_library(swscale_LIB NAMES swscale PATHS ${FFMPEG_DIR} PATH_SUFFIXES lib REQUIRED)
 
-add_executable(ffmpeg_codec ffmpeg_audio_decoder.cpp ffmpeg_audio_encoder.cpp main.cpp ffmpeg_audio_adapter.cpp)
+add_executable(ffmpeg_codec ffmpeg_audio_decoder.cpp ffmpeg_audio_encoder.cpp main.cpp ffmpeg_audio_adapter.cpp common.cpp)
 target_include_directories(ffmpeg_codec PRIVATE ${FFMPEG_INCLUDE_DIR})
 target_link_libraries(ffmpeg_codec PRIVATE ${avcodec_LIB} ${avdevice_LIB} ${avfilter_LIB} ${avformat_LIB} ${avutil_LIB} ${swresample_LIB} ${swscale_LIB})
 target_compile_definitions(ffmpeg_codec PRIVATE SPLEETER_ENABLE_PROGRESS_CALLBACK)

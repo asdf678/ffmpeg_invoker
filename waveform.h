@@ -17,6 +17,15 @@ struct Waveform {
   std::size_t nb_frames;
   std::int32_t nb_channels;
   std::vector<float> data;
+
+  Waveform sub_frames(std::size_t start, std::size_t end) const {
+    std::size_t count = end - start;
+    return Waveform{.nb_frames = count,
+                    .nb_channels = nb_channels,
+                    .data =
+                        std::vector<float>(data.cbegin() + start * nb_channels,
+                                           data.cbegin() + end * nb_channels)};
+  }
 };
 
 /// @brief List of waveforms

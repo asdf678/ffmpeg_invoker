@@ -1,3 +1,4 @@
+#include "common.h"
 #include "ffmpeg_audio_adapter.h"
 #include "waveform.h"
 #include <atomic>
@@ -5,8 +6,12 @@
 #include <chrono>
 #include <iostream>
 #include <memory>
+#include <queue>
 #include <string>
 #include <thread>
+
+#define ENABLE_SEGMENT 0
+
 using namespace std;
 int main(int argc, char **argv) {
   // char *argvA[4] = {"", "/Users/tzy/Downloads/2.m4a", "./test2.mp3", "-1"};
@@ -56,11 +61,40 @@ int main(int argc, char **argv) {
     auto adapter = std::make_unique<spleeter::FfmpegAudioAdapter>(
         output_flename, &cancel_token);
 
-    auto encode_ret = adapter->Encode(std::move(*waveform), [](auto &&t) {
-      std::cout << "encode pos:" << t << "ms" << endl;
-    });
-    /// 由于被move了，对象不可用，所以在这里reset null
+    /// 按10s进行分割
+    constexpr std::size_t segment_nb_samples =
+        spleeter::constants::kSampleRate * 2;
+/// 需要多0.5s进行临界点处理
+#if ENABLE_SEGMENT
+    constexpr std::size_t boundary_nb_samples =
+        spleeter::constants::kSampleRate * 1;
+#else
+    constexpr std::size_t boundary_nb_samples =
+        spleeter::constants::kSampleRate * 0;
+#endif
+
+    std::queue<spleeter::Waveform> segments = spleeter::segment_audio(
+        *waveform, segment_nb_samples, boundary_nb_samples);
+    /// 释放内存
     waveform.reset();
+
+    int encode_ret = -1;
+    while (!segments.empty()) {
+      spleeter::Waveform curr = segments.front();
+
+      encode_ret = adapter->Encode(curr, [](auto &&t) {
+        std::cout << "encode pos:" << t << "ms" << endl;
+      });
+      segments.pop();
+
+      if (encode_ret <= 0) {
+        break;
+      }
+    }
+
+    if (encode_ret > 0) {
+      encode_ret = adapter->FinishEncode();
+    }
     if (encode_ret == 0) {
       cout << "save failed(canceled):" << output_flename << endl;
       return 1;
