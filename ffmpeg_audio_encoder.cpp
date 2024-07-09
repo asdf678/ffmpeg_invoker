@@ -763,8 +763,7 @@ int FFmpegAudioEncoder::encode(Waveform waveform) {
           break;
       }
 
-      while (av_audio_fifo_size(fifo) >= output_frame_size ||
-             (finished && av_audio_fifo_size(fifo) > 0)) {
+      while (av_audio_fifo_size(fifo) >= output_frame_size) {
         /* Take one frame worth of audio samples from the FIFO buffer,
          * encode it and write it to the output file. */
         if (load_encode_and_write(fifo, output_format_context,
@@ -775,6 +774,19 @@ int FFmpegAudioEncoder::encode(Waveform waveform) {
         //         progress_fun();
         // #endif
       }
+
+      // while (av_audio_fifo_size(fifo) >= output_frame_size ||
+      //        (finished && av_audio_fifo_size(fifo) > 0)) {
+      //   /* Take one frame worth of audio samples from the FIFO buffer,
+      //    * encode it and write it to the output file. */
+      //   if (load_encode_and_write(fifo, output_format_context,
+      //                             output_codec_context, pts))
+      //     goto cleanup;
+      //   check_cancel_and_throw(cancel_token);
+      //   // #if SPLEETER_ENABLE_PROGRESS_CALLBACK
+      //   //         progress_fun();
+      //   // #endif
+      // }
 
       /* If we are at the end of the input file and have encoded
        * all remaining samples, we can exit this loop and finish. */
@@ -806,8 +818,23 @@ int FFmpegAudioEncoder::finish() {
 
   AVFormatContext *&output_format_context = output_format_context_;
   AVCodecContext *&output_codec_context = output_codec_context_;
+  AVAudioFifo *fifo = fifo_;
+
   int ret = AVERROR_EXIT;
   int data_written;
+
+  while (av_audio_fifo_size(fifo) > 0) {
+    /* Take one frame worth of audio samples from the FIFO buffer,
+     * encode it and write it to the output file. */
+    if (load_encode_and_write(fifo, output_format_context, output_codec_context,
+                              pts))
+      goto cleanup;
+    check_cancel_and_throw(cancel_token);
+    // #if SPLEETER_ENABLE_PROGRESS_CALLBACK
+    //         progress_fun();
+    // #endif
+  }
+
   /* Flush the encoder as it may have delayed frames. */
   do {
     if (encode_audio_frame(NULL, output_format_context, output_codec_context,

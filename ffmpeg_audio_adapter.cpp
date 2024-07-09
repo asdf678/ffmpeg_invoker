@@ -33,12 +33,7 @@ int FfmpegAudioAdapter::Encode(Waveform waveform, std::string filename,
   if (!encoder) {
     return -1;
   }
-  auto waveform_copy = waveform;
   int ret = encoder->encode(std::move(waveform));
-  // if(ret>0)
-  // {
-  //   ret = encoder->encode(std::move(waveform_copy));
-  // }
   if (ret > 0) {
     ret = encoder->finish();
   }

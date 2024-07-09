@@ -8,11 +8,11 @@
 #include <thread>
 using namespace std;
 int main(int argc, char **argv) {
-  char *argvA[4] = {"", "/Users/tzy/Downloads/2.m4a", "./test2.mp3", "-1"};
-  if (argc != 4) {
-    argc = 4;
-    argv = argvA;
-  }
+  // char *argvA[4] = {"", "/Users/tzy/Downloads/2.m4a", "./test2.mp3", "-1"};
+  // if (argc != 4) {
+  //   argc = 4;
+  //   argv = argvA;
+  // }
 
   if (argc <= 1) {
     cout << "please input path" << endl;

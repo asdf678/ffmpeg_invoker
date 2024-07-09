@@ -4,6 +4,7 @@
 #include <chrono>
 #include <exception>
 #include <string>
+#include <functional>
 namespace spleeter {
 
 using ProgressCallback = std::function<void(int64_t)>;
