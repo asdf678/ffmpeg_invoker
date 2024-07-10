@@ -60,4 +60,19 @@ spleeter::Waveform restore_segment_audio(const Waveform &waveform,
   return waveform.sub_frames(start, end);
 }
 
+spleeter::Waveform restore_segment_audio(const Waveform &waveform,
+                                         std::size_t head_count,
+                                         std::size_t tail_count) {
+  std::size_t start = 0;
+  std::size_t end = waveform.nb_frames;
+
+  if (head_count) {
+    start += head_count;
+  }
+  if (end) {
+    end -= tail_count;
+  }
+  return waveform.sub_frames(start, end);
+}
+
 } // namespace spleeter

@@ -18,7 +18,8 @@
 
 using namespace std;
 int main(int argc, char **argv) {
-  // char *argvA[4] = {"", "/Users/tzy/Downloads/2.m4a", "./test2.mp3", "-1"};
+  // char *argvA[4] = {"", "C:\\KwDownload\\song\\44100_32.mp3", "./test2.mp3",
+  //                   "-1"};
   // if (argc != 4) {
   //   argc = 4;
   //   argv = argvA;
@@ -45,26 +46,6 @@ int main(int argc, char **argv) {
   std::atomic_bool cancel_token{false};
 
   thread t([=, &cancel_token]() {
-    unique_ptr<spleeter::Waveform> waveform;
-    auto decode_ret = spleeter::FfmpegAudioCodec::Decode(
-        path, -1, -1, waveform,
-        [](auto &&t) { std::cout << "decode pos:" << t << "ms" << endl; },
-        &cancel_token);
-    if (decode_ret == 0) {
-      cout << "load failed(canceled):" << path << endl;
-      return 1;
-    } else if (decode_ret < 0) {
-      cout << "load failed(error):" << path << endl;
-      return 1;
-    } else {
-      cout << "load success:" << path << endl;
-    }
-    assert(waveform);
-    cout << "result nb_channels:" << waveform->nb_channels << endl;
-    cout << "result nb_frames:" << waveform->nb_frames << endl;
-    auto codec = std::make_unique<spleeter::FfmpegAudioCodec>(
-        output_flename, &cancel_token);
-
     /// 按10s进行分割
     constexpr std::size_t segment_nb_samples =
         spleeter::constants::kSampleRate * 10;
@@ -77,50 +58,51 @@ int main(int argc, char **argv) {
         spleeter::constants::kSampleRate * 0;
 #endif
 
-    std::queue<spleeter::Waveform> segments = spleeter::segment_audio(
-        *waveform, segment_nb_samples, boundary_nb_samples);
-    /// 释放内存
-    waveform.reset();
+    spleeter::AudioDecoder decoder(path, &cancel_token);
+    if (!decoder) {
+      cout << "decoder create failed";
+      return -1;
+    }
+    spleeter::AudioEncoder encoder(output_flename, &cancel_token);
+    if (!encoder) {
+      cout << "encoder create failed";
+      return -1;
+    }
+    while (1) {
+      unique_ptr<spleeter::Waveform> waveform;
+      int decode_ret = decoder.Decode(waveform, segment_nb_samples);
 
-    int encode_ret = -1;
-    std::size_t segment_index = 0, segment_size = segments.size();
-    while (!segments.empty()) {
-      bool head = true, tail = true;
-      if (segment_index == 0) {
-        head = false;
+      if (decode_ret == 0) {
+        cout << "decode failed(canceled):" << path << endl;
+        return 1;
+      } else if (decode_ret < 0) {
+        cout << "decode failed(error):" << path << endl;
+        return 1;
       }
-      if (segment_index == segment_size - 1) {
-        tail = false;
+      if (!waveform) {
+        cout << "decode finished:" << path << endl;
+      } else {
+        cout << "decode success,nb_samples:"
+             << (waveform ? waveform->nb_frames : 0) << endl;
       }
-#if ENABLE_SEGMENT_RESTORE
-      spleeter::Waveform curr = spleeter::restore_segment_audio(
-          segments.front(), boundary_nb_samples, head, tail);
-#else
-      spleeter::Waveform curr = segments.front();
-#endif
 
-      encode_ret = codec->Encode(curr, [](auto &&t) {
-        std::cout << "encode pos:" << t << "ms" << endl;
-      });
-      segments.pop();
-      ++segment_index;
+      if (waveform) {
+        int encode_ret = encoder.Encode(*waveform);
+        if (encode_ret == 0) {
+          cout << "encode failed(canceled):" << endl;
+          return 1;
+        } else if (encode_ret < 0) {
+          cout << "encode failed(error):" << endl;
+          return 1;
+        } else {
+          cout << "encode success" << endl;
+        }
 
-      if (encode_ret <= 0) {
+      } else {
+        encoder.FinishEncode();
+        cout << "encode complete:" << output_flename << endl;
         break;
       }
-    }
-
-    if (encode_ret > 0) {
-      encode_ret = codec->FinishEncode();
-    }
-    if (encode_ret == 0) {
-      cout << "save failed(canceled):" << output_flename << endl;
-      return 1;
-    } else if (encode_ret < 0) {
-      cout << "save failed(error):" << output_flename << endl;
-      return 1;
-    } else {
-      cout << "save success:" << output_flename << endl;
     }
 
     return 0;

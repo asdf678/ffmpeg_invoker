@@ -13,37 +13,57 @@
 #include <memory>
 
 namespace spleeter {
-    namespace codec {
-        class FFmpegAudioEncoder;
+namespace codec {
+class FFmpegAudioEncoder;
 
-        class FFmpegAudioDecoder;
-    }
-    class FfmpegAudioCodec final {
-    private:
-        std::unique_ptr<codec::FFmpegAudioEncoder> encoder_;
-    public:
+class FFmpegAudioDecoder;
+} // namespace codec
 
-        FfmpegAudioCodec(const FfmpegAudioCodec &) = delete;
+class AudioDecoder {
+private:
+  std::unique_ptr<codec::FFmpegAudioDecoder> decoder_;
 
-        FfmpegAudioCodec &operator=(const FfmpegAudioCodec &) = delete;
+public:
+  AudioDecoder(const AudioDecoder &) = delete;
 
-        FfmpegAudioCodec(FfmpegAudioCodec &&);
+  AudioDecoder &operator=(const AudioDecoder &) = delete;
 
-        FfmpegAudioCodec &operator=(FfmpegAudioCodec &&);
+  AudioDecoder(AudioDecoder &&);
 
-        FfmpegAudioCodec(std::string out_filename, std::atomic_bool *cancel_token);
+  AudioDecoder &operator=(AudioDecoder &&);
 
-        static int Decode(const std::string path, const std::int64_t start,
-                          const std::int64_t duration, std::unique_ptr<Waveform> &result,
-                          ProgressCallback progress_callback, std::atomic_bool *cancel_token);
+  AudioDecoder(std::string path, std::atomic_bool *cancel_token);
 
-        int Encode(const Waveform &waveform, ProgressCallback progress_callback);
+  int Decode(std::unique_ptr<Waveform> &result, std::size_t max_frame_size);
 
-        int FinishEncode();
+  operator bool() { return static_cast<bool>(decoder_); }
 
-        ~FfmpegAudioCodec();
+  ~AudioDecoder();
+};
 
-    };
+class AudioEncoder {
+private:
+  std::unique_ptr<codec::FFmpegAudioEncoder> encoder_;
+
+public:
+  AudioEncoder(const AudioEncoder &) = delete;
+
+  AudioEncoder &operator=(const AudioEncoder &) = delete;
+
+  AudioEncoder(AudioEncoder &&);
+
+  AudioEncoder &operator=(AudioEncoder &&);
+
+  AudioEncoder(std::string out_filename, std::atomic_bool *cancel_token);
+
+  int Encode(const Waveform &waveform);
+
+  int FinishEncode();
+  operator bool() { return static_cast<bool>(encoder_); }
+
+  ~AudioEncoder();
+};
+
 } // namespace spleeter
 
 #endif /// SPLEETER_AUDIO_FFMPEG_AUDIO_ADAPTER_H

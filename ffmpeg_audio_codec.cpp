@@ -4,72 +4,56 @@
 #include "waveform.h"
 #include <algorithm>
 #include <assert.h>
+#include <cstddef>
 #include <memory>
 #include <string>
 
 namespace spleeter {
 
-    static constexpr AVSampleFormat kSampleFormat = AV_SAMPLE_FMT_FLT;
-    static constexpr AVChannelLayout kChannelLayout = AV_CHANNEL_LAYOUT_STEREO;
+static constexpr AVSampleFormat kSampleFormat = AV_SAMPLE_FMT_FLT;
+static constexpr AVChannelLayout kChannelLayout = AV_CHANNEL_LAYOUT_STEREO;
 
+AudioDecoder::AudioDecoder(std::string path, std::atomic_bool *cancel_token)
+    : decoder_(codec::FFmpegAudioDecoder::create(
+          path, spleeter::constants::kSampleRate, kSampleFormat, kChannelLayout,
+          cancel_token)) {}
 
-    FfmpegAudioCodec::FfmpegAudioCodec(std::string out_filename, std::atomic_bool *cancel_token)
-            : encoder_(
-            codec::FFmpegAudioEncoder::create(out_filename, spleeter::constants::kSampleRate,
-                                              kSampleFormat,
-                                              kChannelLayout, -1, cancel_token)) {
+int AudioDecoder::Decode(std::unique_ptr<Waveform> &result,
+                         std::size_t max_frame_size) {
 
-    }
+  return decoder_->decode(result, max_frame_size);
+}
 
-    int FfmpegAudioCodec::Decode(const std::string path,
-                                 const std::int64_t start,
-                                 const std::int64_t duration,
-                                 std::unique_ptr<Waveform> &result,
-                                 ProgressCallback progress_callback,
-                                 std::atomic_bool *cancel_token) {
-        std::unique_ptr<codec::FFmpegAudioDecoder> decoder = std::make_unique<codec::FFmpegAudioDecoder>(
-                spleeter::constants::kSampleRate, kSampleFormat, kChannelLayout,
-                cancel_token);
+AudioDecoder &AudioDecoder::operator=(AudioDecoder &&) = default;
 
-//        return spleeter::codec::decode(path, kSampleRate, kSampleFormat,
-//                                       kChannelLayout, start, duration, cancel_token_,
-//                                       result, std::move(progress_callback));
-        if (!decoder) {
-            return -1;
-        }
-        return decoder->decode(path, start, duration, result, std::move(progress_callback));
-    }
+AudioDecoder::AudioDecoder(AudioDecoder &&) = default;
 
-    int FfmpegAudioCodec::Encode(const Waveform &waveform, ProgressCallback progress_callback) {
-        //   d = new spleeter::codec::FFmpegAudioEncoder()
-//        auto encoder = spleeter::codec::FFmpegAudioEncoder::create(
-//                filename, kSampleRate, kSampleFormat, kChannelLayout, -1, &cancel_token_);
-        if (!encoder_) {
-            return -1;
-        }
-        int ret = encoder_->encode(waveform);
+AudioDecoder::~AudioDecoder() = default;
 
-        return ret;
-        //   return spleeter::codec::encode(filename, kSampleRate, kSampleFormat,
-        //                                  kChannelLayout, std::move(waveform), -1,
-        //                                  cancel_token_,
-        //                                  std::move(progress_callback));
-    }
+AudioEncoder::AudioEncoder(std::string out_filename,
+                           std::atomic_bool *cancel_token)
+    : encoder_(codec::FFmpegAudioEncoder::create(
+          out_filename, spleeter::constants::kSampleRate, kSampleFormat,
+          kChannelLayout, -1, cancel_token)) {}
 
-    int FfmpegAudioCodec::FinishEncode() {
-//        if (ret > 0) {
-//            ret = encoder_->finish();
-//        }
-        if (!encoder_) {
-            return -1;
-        }
-        int ret = encoder_->finish();
-        return ret;
-    }
+int AudioEncoder::FinishEncode() {
+  assert(encoder_);
 
-    FfmpegAudioCodec::~FfmpegAudioCodec() = default;
+  return encoder_->finish();
+}
 
-    FfmpegAudioCodec &FfmpegAudioCodec::operator=(FfmpegAudioCodec &&) = default;
+int AudioEncoder::Encode(const Waveform &waveform) {
+  assert(encoder_);
 
-    FfmpegAudioCodec::FfmpegAudioCodec(FfmpegAudioCodec &&) = default;
+  int ret = encoder_->encode(waveform);
+
+  return ret;
+}
+
+AudioEncoder &AudioEncoder::operator=(AudioEncoder &&) = default;
+
+AudioEncoder::AudioEncoder(AudioEncoder &&) = default;
+
+AudioEncoder::~AudioEncoder() = default;
+
 } // namespace spleeter
