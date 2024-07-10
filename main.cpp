@@ -10,7 +10,11 @@
 #include <string>
 #include <thread>
 
-#define ENABLE_SEGMENT 0
+#define ENABLE_SEGMENT 1
+
+#if ENABLE_SEGMENT
+#define ENABLE_SEGMENT_RESTORE 1
+#endif
 
 using namespace std;
 int main(int argc, char **argv) {
@@ -63,7 +67,7 @@ int main(int argc, char **argv) {
 
     /// 按10s进行分割
     constexpr std::size_t segment_nb_samples =
-        spleeter::constants::kSampleRate * 2;
+        spleeter::constants::kSampleRate * 10;
 /// 需要多0.5s进行临界点处理
 #if ENABLE_SEGMENT
     constexpr std::size_t boundary_nb_samples =
@@ -79,13 +83,27 @@ int main(int argc, char **argv) {
     waveform.reset();
 
     int encode_ret = -1;
+    std::size_t segment_index = 0, segment_size = segments.size();
     while (!segments.empty()) {
+      bool head = true, tail = true;
+      if (segment_index == 0) {
+        head = false;
+      }
+      if (segment_index == segment_size - 1) {
+        tail = false;
+      }
+#if ENABLE_SEGMENT_RESTORE
+      spleeter::Waveform curr = spleeter::restore_segment_audio(
+          segments.front(), boundary_nb_samples, head, tail);
+#else
       spleeter::Waveform curr = segments.front();
+#endif
 
       encode_ret = adapter->Encode(curr, [](auto &&t) {
         std::cout << "encode pos:" << t << "ms" << endl;
       });
       segments.pop();
+      ++segment_index;
 
       if (encode_ret <= 0) {
         break;

@@ -4,6 +4,7 @@
 #include "waveform.h"
 #include <atomic>
 #include <chrono>
+#include <deque>
 #include <exception>
 #include <functional>
 #include <queue>
@@ -39,6 +40,10 @@ std::chrono::milliseconds get_current_timestamp();
 std::queue<spleeter::Waveform> segment_audio(const Waveform &,
                                              std::size_t segment_nb_samples,
                                              std::size_t boundary_nb_samples);
+
+spleeter::Waveform restore_segment_audio(const Waveform &waveform,
+                                         std::size_t boundary_nb_samples,
+                                         bool head, bool tail);
 
 } // namespace spleeter
 
