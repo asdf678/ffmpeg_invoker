@@ -3,8 +3,8 @@
 /// @brief Contains implementation of FFMPEG based Audio Adapter
 /// @copyright Copyright (c) 2020, MIT License
 ///
-#ifndef SPLEETER_AUDIO_FFMPEG_AUDIO_ADAPTER_H
-#define SPLEETER_AUDIO_FFMPEG_AUDIO_ADAPTER_H
+#ifndef SPLEETER_FFMPEG_AUDIO_CODEC_H
+#define SPLEETER_FFMPEG_AUDIO_CODEC_H
 
 #include "common.h"
 #include "waveform.h"
@@ -18,30 +18,30 @@ namespace spleeter {
 
         class FFmpegAudioDecoder;
     }
-    class FfmpegAudioAdapter final {
+    class FfmpegAudioCodec final {
     private:
         std::unique_ptr<codec::FFmpegAudioEncoder> encoder_;
     public:
 
-        FfmpegAudioAdapter(const FfmpegAudioAdapter &) = delete;
+        FfmpegAudioCodec(const FfmpegAudioCodec &) = delete;
 
-        FfmpegAudioAdapter &operator=(const FfmpegAudioAdapter &) = delete;
+        FfmpegAudioCodec &operator=(const FfmpegAudioCodec &) = delete;
 
-        FfmpegAudioAdapter(FfmpegAudioAdapter &&);
+        FfmpegAudioCodec(FfmpegAudioCodec &&);
 
-        FfmpegAudioAdapter &operator=(FfmpegAudioAdapter &&);
+        FfmpegAudioCodec &operator=(FfmpegAudioCodec &&);
 
-        FfmpegAudioAdapter(std::string out_filename, std::atomic_bool *cancel_token);
+        FfmpegAudioCodec(std::string out_filename, std::atomic_bool *cancel_token);
 
         static int Decode(const std::string path, const std::int64_t start,
                           const std::int64_t duration, std::unique_ptr<Waveform> &result,
                           ProgressCallback progress_callback, std::atomic_bool *cancel_token);
 
-        int Encode(Waveform waveform, ProgressCallback progress_callback);
+        int Encode(const Waveform &waveform, ProgressCallback progress_callback);
 
         int FinishEncode();
 
-        ~FfmpegAudioAdapter();
+        ~FfmpegAudioCodec();
 
     };
 } // namespace spleeter

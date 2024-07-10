@@ -1,6 +1,6 @@
 
-#ifndef SPLEETER_FFMPEG_AUDIO_DECODER
-#define SPLEETER_FFMPEG_AUDIO_DECODER
+#ifndef SPLEETER_FFMPEG_AUDIO_DECODER_H
+#define SPLEETER_FFMPEG_AUDIO_DECODER_H
 extern "C" {
 #include "libavutil/channel_layout.h"
 #include "libavutil/samplefmt.h"

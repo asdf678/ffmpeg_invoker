@@ -1,6 +1,6 @@
 
-#ifndef SPLEETER_FFMPEG_AUDIO_ENCODER
-#define SPLEETER_FFMPEG_AUDIO_ENCODER
+#ifndef SPLEETER_FFMPEG_AUDIO_ENCODER_H
+#define SPLEETER_FFMPEG_AUDIO_ENCODER_H
 #include "common.h"
 #include "waveform.h"
 #include <cassert>
@@ -53,7 +53,7 @@ public:
          const AVChannelLayout &src_ch_layout, int bitrate,
          std::atomic_bool *cancel_token);
 
-  int encode(Waveform waveform);
+  int encode(const Waveform &waveform);
 
   int finish();
 

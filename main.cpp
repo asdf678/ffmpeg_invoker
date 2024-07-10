@@ -1,5 +1,5 @@
 #include "common.h"
-#include "ffmpeg_audio_adapter.h"
+#include "ffmpeg_audio_codec.h"
 #include "waveform.h"
 #include <atomic>
 #include <cassert>
@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
 
   thread t([=, &cancel_token]() {
     unique_ptr<spleeter::Waveform> waveform;
-    auto decode_ret = spleeter::FfmpegAudioAdapter::Decode(
+    auto decode_ret = spleeter::FfmpegAudioCodec::Decode(
         path, -1, -1, waveform,
         [](auto &&t) { std::cout << "decode pos:" << t << "ms" << endl; },
         &cancel_token);
@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
     assert(waveform);
     cout << "result nb_channels:" << waveform->nb_channels << endl;
     cout << "result nb_frames:" << waveform->nb_frames << endl;
-    auto adapter = std::make_unique<spleeter::FfmpegAudioAdapter>(
+    auto codec = std::make_unique<spleeter::FfmpegAudioCodec>(
         output_flename, &cancel_token);
 
     /// 按10s进行分割
@@ -99,7 +99,7 @@ int main(int argc, char **argv) {
       spleeter::Waveform curr = segments.front();
 #endif
 
-      encode_ret = adapter->Encode(curr, [](auto &&t) {
+      encode_ret = codec->Encode(curr, [](auto &&t) {
         std::cout << "encode pos:" << t << "ms" << endl;
       });
       segments.pop();
@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
     }
 
     if (encode_ret > 0) {
-      encode_ret = adapter->FinishEncode();
+      encode_ret = codec->FinishEncode();
     }
     if (encode_ret == 0) {
       cout << "save failed(canceled):" << output_flename << endl;
