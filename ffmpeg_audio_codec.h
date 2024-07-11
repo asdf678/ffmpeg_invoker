@@ -9,6 +9,7 @@
 #include "common.h"
 #include "waveform.h"
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <memory>
 
@@ -32,7 +33,7 @@ public:
 
   AudioDecoder &operator=(AudioDecoder &&);
 
-  AudioDecoder(std::string path, std::atomic_bool *cancel_token);
+  AudioDecoder(std::string path, CancelToken *cancel_token);
 
   int Decode(std::unique_ptr<Waveform> &result, std::size_t max_frame_size);
 
@@ -54,11 +55,14 @@ public:
 
   AudioEncoder &operator=(AudioEncoder &&);
 
-  AudioEncoder(std::string out_filename, std::atomic_bool *cancel_token);
+  AudioEncoder(std::string out_filename, CancelToken *cancel_token);
 
   int Encode(const Waveform &waveform);
 
   int FinishEncode();
+
+  std::int64_t LastTimestamp();
+
   operator bool() { return static_cast<bool>(encoder_); }
 
   ~AudioEncoder();

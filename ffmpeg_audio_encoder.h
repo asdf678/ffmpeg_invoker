@@ -21,7 +21,7 @@ namespace spleeter {
 namespace codec {
 // int encode(const std::string &path, int src_sample_rate,
 //            AVSampleFormat src_sample_fmt, AVChannelLayout src_ch_layout,
-//            Waveform waveform, int bitrate, std::atomic_bool &cancel_token,
+//            Waveform waveform, int bitrate, CancelToken &cancel_token,
 //            ProgressCallback progress_callback);
 
 class FFmpegAudioEncoder {
@@ -29,7 +29,7 @@ class FFmpegAudioEncoder {
   AVSampleFormat src_sample_fmt_;
   AVChannelLayout src_ch_layout_;
   int bitrate_;
-  std::atomic_bool *cancel_token_;
+  CancelToken *cancel_token_;
   std::string path_;
 
   AVFormatContext *output_format_context_ = NULL;
@@ -45,17 +45,19 @@ public:
   FFmpegAudioEncoder(std::string path, int src_sample_rate,
                      AVSampleFormat src_sample_fmt,
                      const AVChannelLayout &src_ch_layout, int bitrate,
-                     std::atomic_bool *cancel_token);
+                     CancelToken *cancel_token);
 
 public:
   static std::unique_ptr<FFmpegAudioEncoder>
   create(std::string path, int src_sample_rate, AVSampleFormat src_sample_fmt,
          const AVChannelLayout &src_ch_layout, int bitrate,
-         std::atomic_bool *cancel_token);
+         CancelToken *cancel_token);
 
   int encode(const Waveform &waveform);
 
   int finish();
+
+  std::int64_t last_timestamp();
 
   virtual ~FFmpegAudioEncoder();
 };

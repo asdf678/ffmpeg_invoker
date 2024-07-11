@@ -274,7 +274,7 @@ static int open_input_file(const char *filename,
   return 0;
 }
 
-inline void check_cancel_and_throw(std::atomic_bool &cancel_token) {
+inline void check_cancel_and_throw(CancelToken &cancel_token) {
   CancelException::check_cancel_and_throw(cancel_token);
 }
 static int decode_audio_frame(AVFrame *frame,
@@ -427,7 +427,7 @@ cleanup:
 static int decode(std::string path, int dst_rate, AVSampleFormat dst_sample_fmt,
                   const AVChannelLayout &dst_ch_layout,
                   const std::int64_t start, const std::int64_t duration,
-                  std::atomic_bool &cancel_token,
+                  CancelToken &cancel_token,
                   std::unique_ptr<Waveform> &result,
                   ProgressCallback progress_callback) {
   ///
@@ -607,7 +607,7 @@ end:
 FFmpegAudioDecoder::FFmpegAudioDecoder(std::string path, int dst_sample_rate,
                                        AVSampleFormat dst_sample_fmt,
                                        const AVChannelLayout &dst_ch_layout,
-                                       std::atomic_bool *cancel_token)
+                                       CancelToken *cancel_token)
     : path_(path), dst_sample_rate_(dst_sample_rate),
       dst_sample_fmt_(dst_sample_fmt), cancel_token_(cancel_token) {
   av_channel_layout_copy(&dst_ch_layout_, &dst_ch_layout);
@@ -625,7 +625,7 @@ FFmpegAudioDecoder::FFmpegAudioDecoder(std::string path, int dst_sample_rate,
 
 std::unique_ptr<FFmpegAudioDecoder> FFmpegAudioDecoder::create(
     std::string path, int dst_sample_rate, AVSampleFormat dst_sample_fmt,
-    const AVChannelLayout &dst_ch_layout, std::atomic_bool *cancel_token) {
+    const AVChannelLayout &dst_ch_layout, CancelToken *cancel_token) {
   std::unique_ptr<FFmpegAudioDecoder> decoder =
       std::make_unique<FFmpegAudioDecoder>(
           path, dst_sample_rate, dst_sample_fmt, dst_ch_layout, cancel_token);

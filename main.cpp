@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
   string output_flename = argv[2];
   int alive_time = std::stoi(argv[3]);
   cout << "load path:" << path << endl;
-  std::atomic_bool cancel_token{false};
+  spleeter::CancelToken cancel_token;
 
   thread t([=, &cancel_token]() {
     /// 按10s进行分割
@@ -130,7 +130,7 @@ int main(int argc, char **argv) {
           cout << "encode failed(error):" << endl;
           return 1;
         }
-        cout << "encode success" << endl;
+        cout << "encode success(" << encoder.LastTimestamp() << "ms)" << endl;
 #if ENABLE_SEGMENT
         std::size_t next_boundary_n =
             boundary_nb_samples < waveform->nb_frames
@@ -160,7 +160,7 @@ int main(int argc, char **argv) {
   if (alive_time > 0) {
     this_thread::sleep_for(std::chrono::milliseconds(alive_time));
     // adapter->Cancel();
-    cancel_token.store(true);
+    cancel_token.cancel();
   }
 
   t.join();

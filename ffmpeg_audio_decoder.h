@@ -21,7 +21,7 @@ class FFmpegAudioDecoder {
   int dst_sample_rate_;
   AVSampleFormat dst_sample_fmt_;
   AVChannelLayout dst_ch_layout_;
-  std::atomic_bool *cancel_token_;
+  CancelToken *cancel_token_;
   std::string path_;
 
   AVFormatContext *input_format_context_{nullptr};
@@ -35,11 +35,11 @@ public:
   FFmpegAudioDecoder(std::string path, int dst_sample_rate,
                      AVSampleFormat dst_sample_fmt,
                      const AVChannelLayout &dst_ch_layout,
-                     std::atomic_bool *cancel_token);
+                     CancelToken *cancel_token);
 
   static std::unique_ptr<FFmpegAudioDecoder>
   create(std::string path, int dst_sample_rate, AVSampleFormat dst_sample_fmt,
-         const AVChannelLayout &dst_ch_layout, std::atomic_bool *cancel_token);
+         const AVChannelLayout &dst_ch_layout, CancelToken *cancel_token);
 
   // int decode(std::string path, const std::int64_t start,
   //            const std::int64_t duration, std::unique_ptr<Waveform> &result,

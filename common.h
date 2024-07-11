@@ -10,6 +10,7 @@
 #include <queue>
 #include <string>
 #include <vector>
+
 namespace spleeter {
 
 namespace constants {
@@ -18,6 +19,13 @@ static constexpr int kChannelNum = 2;
 } // namespace constants
 
 using ProgressCallback = std::function<void(int64_t)>;
+class CancelToken {
+  std::atomic_bool cancel_token_{false};
+
+public:
+  void cancel() { cancel_token_.store(true); }
+  bool is_cancelled() { return cancel_token_; }
+};
 
 class CancelException : public std::exception {
 private:
@@ -28,8 +36,8 @@ public:
 
   const char *what() const noexcept override { return message.c_str(); }
 
-  static void check_cancel_and_throw(std::atomic_bool &cancel_token) {
-    if (cancel_token.load()) {
+  static void check_cancel_and_throw(CancelToken &cancel_token) {
+    if (cancel_token.is_cancelled()) {
       throw CancelException();
     }
   }

@@ -13,7 +13,7 @@ namespace spleeter {
 static constexpr AVSampleFormat kSampleFormat = AV_SAMPLE_FMT_FLT;
 static constexpr AVChannelLayout kChannelLayout = AV_CHANNEL_LAYOUT_STEREO;
 
-AudioDecoder::AudioDecoder(std::string path, std::atomic_bool *cancel_token)
+AudioDecoder::AudioDecoder(std::string path, CancelToken *cancel_token)
     : decoder_(codec::FFmpegAudioDecoder::create(
           path, spleeter::constants::kSampleRate, kSampleFormat, kChannelLayout,
           cancel_token)) {}
@@ -31,7 +31,7 @@ AudioDecoder::AudioDecoder(AudioDecoder &&) = default;
 AudioDecoder::~AudioDecoder() = default;
 
 AudioEncoder::AudioEncoder(std::string out_filename,
-                           std::atomic_bool *cancel_token)
+                           CancelToken *cancel_token)
     : encoder_(codec::FFmpegAudioEncoder::create(
           out_filename, spleeter::constants::kSampleRate, kSampleFormat,
           kChannelLayout, -1, cancel_token)) {}
@@ -48,6 +48,10 @@ int AudioEncoder::Encode(const Waveform &waveform) {
   int ret = encoder_->encode(waveform);
 
   return ret;
+}
+
+std::int64_t AudioEncoder::LastTimestamp() {
+  return encoder_->last_timestamp();
 }
 
 AudioEncoder &AudioEncoder::operator=(AudioEncoder &&) = default;

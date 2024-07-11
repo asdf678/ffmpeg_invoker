@@ -423,12 +423,12 @@ static int write_output_file_trailer(AVFormatContext *output_format_context) {
   return 0;
 }
 
-inline void check_cancel_and_throw(std::atomic_bool &cancel_token) {
+inline void check_cancel_and_throw(CancelToken &cancel_token) {
   CancelException::check_cancel_and_throw(cancel_token);
 }
 // int encode(const std::string &path, int src_sample_rate,
 //            AVSampleFormat src_sample_fmt, AVChannelLayout src_ch_layout,
-//            Waveform waveform, int bitrate, std::atomic_bool &cancel_token,
+//            Waveform waveform, int bitrate, CancelToken &cancel_token,
 //            ProgressCallback progress_callback) {
 //   AVFormatContext *output_format_context = NULL;
 //   AVCodecContext *output_codec_context = NULL;
@@ -559,8 +559,7 @@ inline void check_cancel_and_throw(std::atomic_bool &cancel_token) {
 FFmpegAudioEncoder::FFmpegAudioEncoder(std::string path, int src_sample_rate,
                                        AVSampleFormat src_sample_fmt,
                                        const AVChannelLayout &src_ch_layout,
-                                       int bitrate,
-                                       std::atomic_bool *cancel_token)
+                                       int bitrate, CancelToken *cancel_token)
     : path_(path), src_sample_rate_(src_sample_rate),
       src_sample_fmt_(src_sample_fmt), bitrate_(bitrate),
       cancel_token_(cancel_token) {
@@ -573,7 +572,7 @@ std::unique_ptr<FFmpegAudioEncoder>
 FFmpegAudioEncoder::create(std::string path, int src_sample_rate,
                            AVSampleFormat src_sample_fmt,
                            const AVChannelLayout &src_ch_layout, int bitrate,
-                           std::atomic_bool *cancel_token) {
+                           CancelToken *cancel_token) {
   auto encoder = std::make_unique<FFmpegAudioEncoder>(
       path, src_sample_rate, src_sample_fmt, src_ch_layout, bitrate,
       cancel_token);
@@ -757,6 +756,11 @@ FFmpegAudioEncoder::~FFmpegAudioEncoder() {
     avio_closep(&output_format_context_->pb);
     avformat_free_context(output_format_context_);
   }
+}
+
+std::int64_t FFmpegAudioEncoder::last_timestamp() {
+  assert(output_codec_context_);
+  return av_rescale(pts, 1000, output_codec_context_->sample_rate);
 }
 
 } // namespace codec
