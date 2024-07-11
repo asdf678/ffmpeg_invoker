@@ -7,6 +7,7 @@
 #define SPLEETER_DATATYPES_WAVEFORM_H
 
 #include <algorithm>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <ostream>
@@ -18,6 +19,10 @@ struct Waveform {
   std::int32_t nb_channels;
   std::vector<float> data;
 
+  Waveform sub_end_frames(std::size_t start) const {
+    return sub_frames(start, this->nb_frames);
+  }
+
   Waveform sub_frames(std::size_t start, std::size_t end) const {
     std::size_t count = end - start;
     return Waveform{.nb_frames = count,
@@ -25,6 +30,25 @@ struct Waveform {
                     .data =
                         std::vector<float>(data.cbegin() + start * nb_channels,
                                            data.cbegin() + end * nb_channels)};
+  }
+
+  Waveform &operator+=(const Waveform &other) {
+    assert(nb_channels == other.nb_channels);
+    this->nb_frames += other.nb_frames;
+    this->data.insert(this->data.end(), other.data.cbegin(), other.data.cend());
+    return *this;
+  }
+
+  Waveform operator+(const Waveform &other) const {
+    assert(nb_channels == other.nb_channels);
+    std::vector<float> d = this->data;
+    d.insert(d.end(), other.data.cbegin(), other.data.cend());
+    Waveform ret{
+        .nb_frames = this->nb_frames + other.nb_frames,
+        .nb_channels = other.nb_channels,
+        .data = std::move(d),
+    };
+    return ret;
   }
 };
 
