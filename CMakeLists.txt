@@ -17,20 +17,22 @@ find_library(avutil_LIB NAMES avutil PATHS ${FFMPEG_DIR} PATH_SUFFIXES lib REQUI
 find_library(swresample_LIB NAMES swresample PATHS ${FFMPEG_DIR} PATH_SUFFIXES lib REQUIRED)
 find_library(swscale_LIB NAMES swscale PATHS ${FFMPEG_DIR} PATH_SUFFIXES lib REQUIRED)
 
+set(FFMPEG_INCLUDES_DIR ${FFMPEG_INCLUDE_DIR})
+set(FFMPEG_LIBS ${avcodec_LIB} ${avdevice_LIB} ${avfilter_LIB} ${avformat_LIB} ${avutil_LIB} ${swresample_LIB} ${swscale_LIB})
+
+
 add_executable(ffmpeg_codec ffmpeg_audio_decoder.cpp ffmpeg_audio_encoder.cpp main.cpp ffmpeg_audio_codec.cpp common.cpp)
 target_include_directories(ffmpeg_codec PRIVATE ${FFMPEG_INCLUDE_DIR})
-target_link_libraries(ffmpeg_codec PRIVATE ${avcodec_LIB} ${avdevice_LIB} ${avfilter_LIB} ${avformat_LIB} ${avutil_LIB} ${swresample_LIB} ${swscale_LIB})
+target_link_libraries(ffmpeg_codec PRIVATE ${FFMPEG_LIBS})
 target_compile_definitions(ffmpeg_codec PRIVATE SPLEETER_ENABLE_PROGRESS_CALLBACK)
 
 add_executable(transcode_aac transcode_aac.c)
 target_include_directories(transcode_aac PRIVATE ${FFMPEG_INCLUDE_DIR})
-target_link_libraries(transcode_aac PRIVATE ${avcodec_LIB} ${avdevice_LIB} ${avfilter_LIB} ${avformat_LIB} ${avutil_LIB} ${swresample_LIB} ${swscale_LIB})
+target_link_libraries(transcode_aac PRIVATE ${FFMPEG_LIBS})
+
+add_subdirectory(favutil)
+add_executable(test_favutil test_favutil.cpp)
+target_link_libraries(test_favutil PRIVATE favutil)
 
 message(-----${FFMPEG_INCLUDE_DIR})
-message(-----${avcodec_LIB})
-message(-----${avdevice_LIB})
-message(-----${avfilter_LIB})
-message(-----${avformat_LIB})
-message(-----${avutil_LIB})
-message(-----${swresample_LIB})
-message(-----${swscale_LIB})
+message(-----${FFMPEG_LIBS})
