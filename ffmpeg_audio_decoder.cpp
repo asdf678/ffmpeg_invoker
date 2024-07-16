@@ -427,8 +427,7 @@ cleanup:
 static int decode(std::string path, int dst_rate, AVSampleFormat dst_sample_fmt,
                   const AVChannelLayout &dst_ch_layout,
                   const std::int64_t start, const std::int64_t duration,
-                  CancelToken &cancel_token,
-                  std::unique_ptr<Waveform> &result,
+                  CancelToken &cancel_token, std::unique_ptr<Waveform> &result,
                   ProgressCallback progress_callback) {
   ///
   /// Open Input Audio
@@ -663,8 +662,13 @@ int FFmpegAudioDecoder::decode(std::unique_ptr<Waveform> &result,
       if (read_decode_convert_and_store(
               fifo_, input_format_context_, input_codec_context_,
               dst_ch_layout_.nb_channels, dst_sample_fmt_, dst_sample_rate_,
-              resample_context_, &audio_stream_idx_, &finished_))
-        goto cleanup;
+              resample_context_, &audio_stream_idx_, &finished_)) {
+        if (av_audio_fifo_size(fifo_) > 0) {
+          finished_ = 1;
+        } else {
+          goto cleanup;
+        }
+      }
 
       check_cancel_and_throw(*cancel_token_);
 

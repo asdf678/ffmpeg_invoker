@@ -12,9 +12,9 @@
 #include <thread>
 
 #define ENABLE_SEGMENT 1
-#if ENABLE_SEGMENT
-#define ENABLE_SEGMENT_RESTORE 1
-#endif
+// #if ENABLE_SEGMENT
+// #define ENABLE_SEGMENT_RESTORE 1
+// #endif
 
 using namespace std;
 
@@ -56,9 +56,7 @@ int main(int argc, char **argv) {
 #if ENABLE_SEGMENT
     constexpr std::size_t boundary_nb_samples =
         spleeter::constants::kSampleRate * 1;
-#else
-    constexpr std::size_t boundary_nb_samples =
-        spleeter::constants::kSampleRate * 0;
+    static_assert(boundary_nb_samples < segment_nb_samples, "");
 #endif
 
     spleeter::AudioDecoder decoder(path, &cancel_token);
@@ -71,11 +69,12 @@ int main(int argc, char **argv) {
       cout << "encoder create failed";
       return -1;
     }
-
+#if ENABLE_SEGMENT
     spleeter::Waveform last_boundary_samples{
         .nb_frames = 0,
         .nb_channels = spleeter::constants::kChannelNum,
         .data = {}};
+#endif
     // std::unique_ptr<spleeter::Waveform> last_boundary_samples;
 
     while (1) {
@@ -108,9 +107,18 @@ int main(int argc, char **argv) {
 
         /// do spleeter with w
         spleeter::Waveform spleeter_waveform = do_spleeter(*w_ptr);
-#if ENABLE_SEGMENT_RESTORE
-        spleeter_waveform =
-            spleeter_waveform.sub_end_frames(last_boundary_samples.nb_frames);
+#if ENABLE_SEGMENT
+        std::size_t next_boundary_n;
+        if (waveform->nb_frames < segment_nb_samples) {
+          /// 已经解码完成。
+          next_boundary_n = 0;
+        } else {
+          next_boundary_n = boundary_nb_samples;
+        }
+
+        spleeter_waveform = spleeter_waveform.sub_frames(
+            last_boundary_samples.nb_frames / 2,
+            spleeter_waveform.nb_frames - next_boundary_n / 2);
 #endif
 
         // #if ENABLE_SEGMENT
@@ -132,11 +140,8 @@ int main(int argc, char **argv) {
         }
         cout << "encode success(" << encoder.LastTimestamp() << "ms)" << endl;
 #if ENABLE_SEGMENT
-        std::size_t next_boundary_n =
-            boundary_nb_samples < waveform->nb_frames
-                ? waveform->nb_frames - boundary_nb_samples
-                : 0;
-        last_boundary_samples = waveform->sub_end_frames(next_boundary_n);
+        last_boundary_samples =
+            waveform->sub_end_frames(waveform->nb_frames - next_boundary_n);
 #endif
         waveform.reset();
 

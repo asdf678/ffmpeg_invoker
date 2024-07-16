@@ -376,6 +376,13 @@ cleanup:
   return error;
 }
 
+inline int get_output_frame_size(AVCodecContext *output_codec_context) {
+  if (output_codec_context->codec_id == AV_CODEC_CAP_VARIABLE_FRAME_SIZE) {
+    return 1024;
+  } else {
+    return output_codec_context->frame_size;
+  }
+}
 static int load_encode_and_write(AVAudioFifo *fifo,
                                  AVFormatContext *output_format_context,
                                  AVCodecContext *output_codec_context,
@@ -386,8 +393,8 @@ static int load_encode_and_write(AVAudioFifo *fifo,
   /* Use the maximum number of possible samples per frame.
    * If there is less than the maximum possible frame size in the FIFO
    * buffer use this number. Otherwise, use the maximum possible frame size. */
-  const int frame_size =
-      FFMIN(av_audio_fifo_size(fifo), output_codec_context->frame_size);
+  const int frame_size = FFMIN(av_audio_fifo_size(fifo),
+                               get_output_frame_size(output_codec_context));
   int data_written;
 
   /* Initialize temporary storage for one output frame. */
@@ -426,6 +433,7 @@ static int write_output_file_trailer(AVFormatContext *output_format_context) {
 inline void check_cancel_and_throw(CancelToken &cancel_token) {
   CancelException::check_cancel_and_throw(cancel_token);
 }
+
 // int encode(const std::string &path, int src_sample_rate,
 //            AVSampleFormat src_sample_fmt, AVChannelLayout src_ch_layout,
 //            Waveform waveform, int bitrate, CancelToken &cancel_token,
@@ -480,8 +488,8 @@ inline void check_cancel_and_throw(CancelToken &cancel_token) {
 //     };
 // #endif
 //     while (1) {
-//       const int output_frame_size = output_codec_context->frame_size;
-//       int finished = 0;
+//       const int output_frame_size =
+//       get_output_frame_size(output_codec_context); int finished = 0;
 
 //       while (av_audio_fifo_size(fifo) < output_frame_size) {
 //         if (read_decode_convert_and_store(fifo, output_codec_context,
@@ -641,7 +649,7 @@ int FFmpegAudioEncoder::encode(const Waveform &waveform) {
     //     };
     // #endif
     while (1) {
-      const int output_frame_size = output_codec_context->frame_size;
+      const int output_frame_size = get_output_frame_size(output_codec_context);
       int finished = 0;
 
       while (av_audio_fifo_size(fifo) < output_frame_size) {
