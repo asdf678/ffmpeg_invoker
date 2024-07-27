@@ -34,5 +34,9 @@ add_subdirectory(favutil)
 add_executable(test_favutil test_favutil.cpp)
 target_link_libraries(test_favutil PRIVATE favutil)
 
+add_executable(decode_filter_mix_audio decode_filter_mix_audio.c)
+target_include_directories(decode_filter_mix_audio PRIVATE ${FFMPEG_INCLUDE_DIR})
+target_link_libraries(decode_filter_mix_audio PRIVATE ${FFMPEG_LIBS})
+
 message(-----${FFMPEG_INCLUDE_DIR})
 message(-----${FFMPEG_LIBS})
