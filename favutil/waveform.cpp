@@ -2,7 +2,7 @@
 #include "common.h"
 #include <assert.h>
 #include <list>
-
+#include <algorithm>
 inline int64_t compute_duration(AVFormatContext *ic) {
   return ic->duration == AV_NOPTS_VALUE
              ? -1
